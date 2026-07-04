@@ -1,0 +1,9 @@
+runs/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+ARCHITECTURE_PLAN.md
+DYNAMIC_WORKFLOW_REPORT.md
