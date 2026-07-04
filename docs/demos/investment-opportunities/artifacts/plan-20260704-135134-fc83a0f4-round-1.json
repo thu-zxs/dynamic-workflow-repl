@@ -1,0 +1,133 @@
+{
+  "convergence_policy": {
+    "max_rounds": 2,
+    "min_confidence": 0.8,
+    "require_no_critical_disputes": true
+  },
+  "goal": "Identify actionable current investment opportunities across diverse sectors and markets",
+  "parallel_groups": [
+    {
+      "id": "G1",
+      "max_concurrency": 10,
+      "subtask_ids": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6",
+        "T7",
+        "T8",
+        "T9",
+        "T10"
+      ]
+    }
+  ],
+  "subtasks": [
+    {
+      "agent_role": "Tech Sector Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T1",
+      "prompt": "Analyze current tech sector trends, valuations, and market conditions to identify 1-2 high-conviction investment opportunities. Consider AI, cloud, semiconductors, cybersecurity. Provide rationale, catalysts, risks, and upside potential.",
+      "title": "Tech Sector Opportunity Analysis"
+    },
+    {
+      "agent_role": "Healthcare Sector Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T2",
+      "prompt": "Analyze current healthcare sector dynamics, including biotech, pharmaceuticals, medical devices, and healthcare services. Identify 1-2 compelling investment opportunities with strong clinical, regulatory, or demographic tailwinds.",
+      "title": "Healthcare Sector Opportunity Analysis"
+    },
+    {
+      "agent_role": "Energy Sector Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T3",
+      "prompt": "Evaluate current energy markets, including oil, natural gas, renewables, and transition plays. Identify 1-2 investment opportunities driven by supply/demand imbalances, policy shifts, or technological breakthroughs.",
+      "title": "Energy Sector Opportunity Analysis"
+    },
+    {
+      "agent_role": "Financial Sector Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T4",
+      "prompt": "Assess the banking, insurance, and fintech landscape. Identify 1-2 opportunities benefiting from interest rate trends, regulatory changes, or digital transformation.",
+      "title": "Financial Sector Opportunity Analysis"
+    },
+    {
+      "agent_role": "Consumer Goods Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T5",
+      "prompt": "Examine consumer spending patterns, brand strength, and e-commerce trends. Identify 1-2 investment opportunities in staples, discretionary, or luxury goods.",
+      "title": "Consumer Goods & Retail Opportunity Analysis"
+    },
+    {
+      "agent_role": "Real Estate Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T6",
+      "prompt": "Evaluate commercial and residential real estate markets, REITs, and property trends. Identify 1-2 opportunities leveraging interest rate expectations, demographic shifts, or sector-specific dynamics.",
+      "title": "Real Estate & REIT Opportunity Analysis"
+    },
+    {
+      "agent_role": "Macro Trends Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T7",
+      "prompt": "Analyze global macro factors (inflation, GDP growth, central bank policy, geopolitical risks) to identify investment themes that cut across sectors. Propose 1-2 thematic opportunities (e.g., commodities, currencies, index plays).",
+      "title": "Macroeconomic & Cross-Sector Opportunity Analysis"
+    },
+    {
+      "agent_role": "Quantitative Data Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T8",
+      "prompt": "Screen for undervalued assets using quantitative criteria (low P/E, high free cash flow yield, momentum, etc.). Identify 1-2 statistically compelling opportunities across any sector or market.",
+      "title": "Quantitative Data Screening"
+    },
+    {
+      "agent_role": "Emerging Markets Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T9",
+      "prompt": "Analyze emerging market equities, bonds, and currencies. Identify 1-2 opportunities with strong growth drivers, favorable demographics, or reform catalysts.",
+      "title": "Emerging Markets Opportunity Analysis"
+    },
+    {
+      "agent_role": "Cryptocurrency Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T10",
+      "prompt": "Evaluate the crypto landscape, including Bitcoin, Ethereum, DeFi, and regulatory developments. Identify 1-2 high-potential investments with clear catalysts and risk/reward profiles.",
+      "title": "Cryptocurrency & Digital Assets Analysis"
+    }
+  ],
+  "success_criteria": [
+    "At least 5 distinct investment opportunities identified",
+    "Each opportunity includes rationale, risk factors, and estimated return potential",
+    "Opportunities cover at least 3 different sectors/asset classes",
+    "All opportunities have been critically challenged and validated"
+  ],
+  "verification_steps": [
+    {
+      "id": "V1",
+      "mode": "refute",
+      "prompt": "Critically evaluate every investment opportunity proposed by the analysts. For each, identify potential flaws, overlooked risks, unrealistic assumptions, or conflicting evidence. Present counterarguments to ensure only robust opportunities survive.",
+      "target_subtask_ids": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6",
+        "T7",
+        "T8",
+        "T9",
+        "T10"
+      ]
+    }
+  ]
+}

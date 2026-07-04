@@ -22,7 +22,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--task", help="Run one task and exit")
     parser.add_argument("--offline", action="store_true", help="Use deterministic fake backend")
     parser.add_argument("--yes", action="store_true", help="Auto-confirm planned workflows")
-    parser.add_argument("--dashboard", action="store_true", help="Render a live ANSI workflow dashboard")
+    parser.add_argument(
+        "--dashboard",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Render a live ANSI workflow dashboard (default: enabled; use --no-dashboard for plain events)",
+    )
     parser.add_argument("--quiet", action="store_true", help="Hide realtime event output")
     parser.add_argument("--runs-dir", default="runs", help="Checkpoint directory")
     args = parser.parse_args(argv)

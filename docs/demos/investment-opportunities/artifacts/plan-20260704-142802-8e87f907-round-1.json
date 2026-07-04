@@ -1,0 +1,133 @@
+{
+  "convergence_policy": {
+    "max_rounds": 3,
+    "min_confidence": 0.75,
+    "require_no_critical_disputes": true
+  },
+  "goal": "Analyze current potential investment opportunities across multiple asset classes and provide actionable insights",
+  "parallel_groups": [
+    {
+      "id": "G1",
+      "max_concurrency": 10,
+      "subtask_ids": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6",
+        "T7",
+        "T8",
+        "T9",
+        "T10"
+      ]
+    }
+  ],
+  "subtasks": [
+    {
+      "agent_role": "Macroeconomic Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T1",
+      "prompt": "Analyze current global macroeconomic indicators (GDP growth, inflation, employment, interest rates) and identify trends that could impact investment opportunities.",
+      "title": "Macroeconomic Environment Scan"
+    },
+    {
+      "agent_role": "Sector Analyst - Technology",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T2",
+      "prompt": "Evaluate the technology sector for investment opportunities, considering AI advancements, semiconductor demand, cloud computing, and cybersecurity. Identify specific areas with high growth potential.",
+      "title": "Technology Sector Analysis"
+    },
+    {
+      "agent_role": "Sector Analyst - Healthcare",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T3",
+      "prompt": "Assess the healthcare sector for investment opportunities, focusing on biotech innovations, aging populations, medical devices, and health services. Highlight promising sub-sectors.",
+      "title": "Healthcare Sector Analysis"
+    },
+    {
+      "agent_role": "Commodities and Energy Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T4",
+      "prompt": "Examine the energy sector and commodities markets (oil, gas, renewables, metals) for investment opportunities given energy transition trends and geopolitical factors.",
+      "title": "Energy and Commodities Analysis"
+    },
+    {
+      "agent_role": "Real Estate Investment Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T5",
+      "prompt": "Analyze real estate and infrastructure investment opportunities, considering interest rate sensitivity, urbanization trends, and infrastructure spending plans.",
+      "title": "Real Estate and Infrastructure Analysis"
+    },
+    {
+      "agent_role": "Fixed Income Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T6",
+      "prompt": "Evaluate opportunities in fixed income markets, including government bonds, corporate debt, and high-yield bonds, considering yield curves and credit spreads.",
+      "title": "Fixed Income and Bond Market Analysis"
+    },
+    {
+      "agent_role": "Political Risk Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T7",
+      "prompt": "Identify current geopolitical risks (trade tensions, conflicts, elections) and their potential impact on global investment opportunities.",
+      "title": "Geopolitical Risk Assessment"
+    },
+    {
+      "agent_role": "Monetary Policy Specialist",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T8",
+      "prompt": "Analyze central bank policies (Fed, ECB, BoJ, PBoC) and their implications for interest rates, currency markets, and investment flows.",
+      "title": "Central Bank Policy and Monetary Trends"
+    },
+    {
+      "agent_role": "Alternative Assets Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T9",
+      "prompt": "Explore alternative investment opportunities such as private equity, venture capital, hedge funds, and cryptocurrencies, highlighting areas with high return potential.",
+      "title": "Alternative Investments Scan"
+    },
+    {
+      "agent_role": "ESG Research Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T10",
+      "prompt": "Investigate ESG (Environmental, Social, Governance) investment trends and identify opportunities in sustainable energy, green bonds, and socially responsible companies.",
+      "title": "ESG and Sustainable Investing Trends"
+    }
+  ],
+  "success_criteria": [
+    "Identify at least 3 sectors or asset classes with strong growth potential",
+    "Evaluate key risks for each identified opportunity",
+    "Provide clear, data-driven rationale for each opportunity",
+    "Cover a diverse range including equities, fixed income, and alternative assets"
+  ],
+  "verification_steps": [
+    {
+      "id": "V1",
+      "mode": "refute",
+      "prompt": "Critically examine the findings from all analysts. Identify any inconsistencies, overly optimistic assumptions, missing risk factors, or conflicting signals across different sectors and macro trends. Challenge the validity of the identified opportunities.",
+      "target_subtask_ids": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6",
+        "T7",
+        "T8",
+        "T9",
+        "T10"
+      ]
+    }
+  ]
+}

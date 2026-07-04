@@ -1,0 +1,195 @@
+{
+  "convergence_policy": {
+    "max_rounds": 3,
+    "min_confidence": 0.75,
+    "require_no_critical_disputes": true
+  },
+  "goal": "Address unresolved issues from the prior round: validate claims with current data, reconcile inconsistencies, integrate geopolitical risks into sector opportunities, and achieve high confidence.",
+  "parallel_groups": [
+    {
+      "id": "G1",
+      "max_concurrency": 6,
+      "subtask_ids": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6"
+      ]
+    },
+    {
+      "id": "G2",
+      "max_concurrency": 3,
+      "subtask_ids": [
+        "T7",
+        "T8",
+        "T10"
+      ]
+    },
+    {
+      "id": "G3",
+      "max_concurrency": 3,
+      "subtask_ids": [
+        "T9",
+        "T11",
+        "T12"
+      ]
+    }
+  ],
+  "subtasks": [
+    {
+      "agent_role": "Macroeconomic Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T1",
+      "prompt": "Obtain the most recent official data (within the last 3 months) for US, Eurozone, China, and Japan: GDP growth (annualized and YoY), CPI inflation, unemployment rate, and central bank policy rates. Use primary sources like BEA, BLS, Eurostat, NBS, and central bank websites. Provide an updated macro snapshot and flag any significant changes from previous assumptions.",
+      "title": "Macro Data Refresh"
+    },
+    {
+      "agent_role": "Sector Analyst - Technology",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T2",
+      "prompt": "Retrieve latest forecasts and data: global semiconductor market revenue growth for 2025/2026 (e.g., SIA, Gartner), cloud computing spending projections (e.g., Gartner, IDC), cybersecurity market size and growth, and year-to-date performance of key tech indices (NASDAQ-100, SOX). Validate the claims about NVIDIA, AMD, cloud providers, and cybersecurity leaders with their recent financial reports (revenue growth, guidance). Identify any emerging risks or overvaluation flags.",
+      "title": "Technology Sector Data Refresh"
+    },
+    {
+      "agent_role": "Sector Analyst - Healthcare",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T3",
+      "prompt": "Gather current data: GLP-1 obesity drug market size and growth projections (from industry reports like IQVIA, Evaluate Pharma), AI in healthcare market forecasts (e.g., MarketsandMarkets), aging population statistics (UN, WHO), and recent financials for Eli Lilly, Novo Nordisk, Intuitive Surgical, and Teladoc (revenue, pipeline updates). Assess the impact of any regulatory changes or competitive entries.",
+      "title": "Healthcare Sector Data Refresh"
+    },
+    {
+      "agent_role": "Commodities and Energy Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T4",
+      "prompt": "Fetch current spot and futures prices for crude oil (WTI, Brent), natural gas, copper, and gold. Obtain latest supply/demand outlooks from IEA, EIA, and industry sources. Validate claims about copper deficit, gold safe-haven demand, and renewable energy investment trends. Check recent performance of clean energy ETFs and uranium stocks.",
+      "title": "Energy & Commodities Data Refresh"
+    },
+    {
+      "agent_role": "Real Estate Investment Analyst",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T5",
+      "prompt": "Retrieve Q1/Q2 2025 REIT sector performance data (Nareit, FTSE Nareit indices) for data centers, industrial, and tower REITs. Confirm IIJA disbursement progress and shovel-ready project counts. Obtain current cap rate trends for major property types and urbanisation statistics. Validate the claim about Fed rate cut expectations and their impact on REITs.",
+      "title": "Real Estate & Infrastructure Data Refresh"
+    },
+    {
+      "agent_role": "Monetary Policy Specialist",
+      "depends_on": [],
+      "expected_output": "finding",
+      "id": "T6",
+      "prompt": "Retrieve current yields for US 2Y/10Y Treasury, German Bunds, and Japanese JGBs. Obtain investment-grade and high-yield corporate bond option-adjusted spreads (OAS) as of the latest date. Verify the current policy rates and forward guidance for the Fed (post recent FOMC), ECB, BoJ, and PBoC directly from official statements. Reconcile the earlier claim of aggressive ECB easing with the March 2026 decision to hold rates; provide an explanation.",
+      "title": "Fixed Income & Central Bank Policy Update"
+    },
+    {
+      "agent_role": "Political Risk Analyst",
+      "depends_on": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6"
+      ],
+      "expected_output": "finding",
+      "id": "T7",
+      "prompt": "Using the refreshed macro and sector data from T1-T6, assess current geopolitical risks (US-China trade, Russia-Ukraine, Middle East tensions, major election outcomes). Assign a risk score (low/medium/high) to each identified investment opportunity and adjust the attractiveness of opportunities in technology, energy, real estate, and other sectors accordingly. Output a risk-adjusted opportunity map.",
+      "title": "Geopolitical Risk Integration"
+    },
+    {
+      "agent_role": "Portfolio Strategist",
+      "depends_on": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6"
+      ],
+      "expected_output": "finding",
+      "id": "T8",
+      "prompt": "Examine contradictions among sector findings from T1-T6 (e.g., technology growth assumptions vs. energy transition expectations). Identify where different analysts' assumptions conflict and provide a unified view of the macroeconomic landscape and its sectoral implications. Highlight key themes for investment selection.",
+      "title": "Cross-Sector Reconciliation"
+    },
+    {
+      "agent_role": "Data Quality Analyst",
+      "depends_on": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6"
+      ],
+      "expected_output": "finding",
+      "id": "T10",
+      "prompt": "Review all data points and sources used in the refreshed analyses (T1-T6). Verify timeliness (ideally Q2 2025 or later), credibility (official statistics vs. third-party), and consistency. Identify any remaining assumptions that need validation and propose how to test them.",
+      "title": "Data Quality and Assumptions Check"
+    },
+    {
+      "agent_role": "Investment Strategist",
+      "depends_on": [
+        "T7",
+        "T8"
+      ],
+      "expected_output": "finding",
+      "id": "T9",
+      "prompt": "Based on the risk-adjusted views from T7 and the reconciled cross-sector view from T8, rank the top 5-7 investment opportunities across asset classes by risk-adjusted return potential. Provide clear rationale for each rank, incorporating macro, sector, and risk insights.",
+      "title": "Risk-Return Opportunity Ranking"
+    },
+    {
+      "agent_role": "Thematic Analyst",
+      "depends_on": [
+        "T7",
+        "T8"
+      ],
+      "expected_output": "finding",
+      "id": "T11",
+      "prompt": "Using T7 and T8, group investment opportunities into thematic clusters (e.g., AI-driven, energy transition, demographic shift) and assess the relative strength and interaction among themes. Identify which themes are most resilient to geopolitical risks.",
+      "title": "Thematic Opportunity Clustering"
+    },
+    {
+      "agent_role": "Synthesis Analyst",
+      "depends_on": [
+        "T7",
+        "T8"
+      ],
+      "expected_output": "finding",
+      "id": "T12",
+      "prompt": "Consolidate the rankings from T9 and thematic insights from T11 into a final list of top investment opportunities with supporting evidence, risk assessments, and recommended allocation ranges. Ensure all contradictions are resolved and confidence is high.",
+      "title": "Final Opportunity Consolidation"
+    }
+  ],
+  "success_criteria": [
+    "All key findings supported by recent data from primary sources.",
+    "Confidence levels raised above 0.75.",
+    "Disputes from verification V1 resolved.",
+    "Cross-sector integration completed with ranked opportunities."
+  ],
+  "verification_steps": [
+    {
+      "id": "V1",
+      "mode": "refute",
+      "prompt": "Critically examine the entire workflow output. Challenge the data currency, integration logic, and consistency across all findings. Ensure all claims are supported by verifiable sources and that geopolitical risks are properly incorporated. Flag any remaining low-confidence areas and verify that the opportunity rankings are robust against alternative scenarios.",
+      "target_subtask_ids": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6",
+        "T7",
+        "T8",
+        "T10",
+        "T9",
+        "T11",
+        "T12"
+      ]
+    }
+  ]
+}

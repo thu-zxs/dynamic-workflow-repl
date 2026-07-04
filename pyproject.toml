@@ -10,6 +10,7 @@ repl = ["prompt_toolkit>=3.0.0"]
 
 [project.scripts]
 dynamic-workflows-agent = "dynamic_workflows_agent.cli:main"
+dynamic-workflows-demo = "dynamic_workflows_agent.demo_pipeline:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

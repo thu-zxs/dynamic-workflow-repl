@@ -46,16 +46,16 @@ Offline demo:
 python3 -m dynamic_workflows_agent --offline --yes --task "Design a migration plan"
 ```
 
-Live dashboard mode:
+One-shot task with the default dashboard:
 
 ```bash
-python3 -m dynamic_workflows_agent --offline --yes --dashboard --task "Design a migration plan"
+python3 -m dynamic_workflows_agent --offline --yes --task "Design a migration plan"
 ```
 
-Dashboard REPL mode:
+Default dashboard REPL mode:
 
 ```bash
-python3 -m dynamic_workflows_agent --offline --yes --dashboard
+python3 -m dynamic_workflows_agent --offline --yes
 ```
 
 The dashboard draws an idle panel first. Enter a task at the `dwf>` prompt to
@@ -92,10 +92,46 @@ Resume a run from the REPL:
 /resume 20260703-174500-abc12345
 ```
 
+## Generate Demo from Runs
+
+Use the standalone demo pipeline to turn checkpointed runs into a Git-friendly
+case study:
+
+```bash
+python3 -m dynamic_workflows_agent.demo_pipeline --query "分析当下潜在的投资机会" --output docs/demos/investment-opportunities
+```
+
+The installed console script is equivalent:
+
+```bash
+dynamic-workflows-demo --query "分析当下潜在的投资机会" --output docs/demos/investment-opportunities
+```
+
+The pipeline is session-oriented. It selects all matching run folders, chooses
+the most complete run as the primary narrative, and still includes every
+matched run in the session timeline, planner coverage, worker summaries,
+verifier decisions, and structured artifacts. Use `--list-sessions` to inspect
+inferred sessions, or `--session-id <id>` when run state files contain an
+explicit `session_id`.
+
+Generated output is written under the chosen `docs/demos/...` directory:
+
+- `README.md`
+- `01-session-timeline.md`
+- `02-planner-decisions.md`
+- `03-worker-findings.md`
+- `04-verifier-decisions.md`
+- `05-convergence-and-resume.md`
+- `final-report.md`
+- `artifacts/*.json`
+
+This keeps raw `runs/` out of git while preserving the orchestration evidence
+needed for a demo.
+
 ## Observability
 
-The default terminal output is an append-only event stream. Use `--dashboard`
-for a panel-style ANSI view that refreshes as the workflow runs:
+The default terminal output is a panel-style ANSI dashboard that refreshes as
+the workflow runs. Use `--no-dashboard` for an append-only event stream:
 
 - top status bar: active run, colored phase badge, elapsed time, round, goal, progress bars, model token I/O, and final report path
 - left panel: worker subagents with status icon, role/title, confidence, tool count, and token summary
@@ -114,7 +150,7 @@ Dashboard keyboard controls:
 - `PageUp` / `PageDown`, `Space`: scroll details
 - `q`: exit a detail browser
 
-During live runs, keyboard navigation is enabled in `--dashboard --yes` mode.
+During live runs, keyboard navigation is enabled in dashboard `--yes` mode.
 After any run, use `/inspect [run_id]` to browse the saved planner, dispatcher,
 worker, and verifier details from checkpoint artifacts.
 
