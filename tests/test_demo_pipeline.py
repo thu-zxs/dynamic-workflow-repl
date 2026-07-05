@@ -9,6 +9,7 @@ from dynamic_workflows_agent.demo_pipeline import (
     choose_primary_run,
     generate_demo,
     load_run_records,
+    resolve_output_dir,
     select_session_runs,
 )
 
@@ -24,6 +25,9 @@ class DemoPipelineTests(unittest.TestCase):
                 runs_dir,
                 run_id="run-a",
                 goal="分析当下潜在的投资机会",
+                session_id="session-investment",
+                session_title="Investment session",
+                session_turn=1,
                 status="running",
                 created_at="2026-07-04T10:00:00+00:00",
                 updated_at="2026-07-04T10:10:00+00:00",
@@ -35,6 +39,9 @@ class DemoPipelineTests(unittest.TestCase):
                 runs_dir,
                 run_id="run-b",
                 goal="分析当下潜在的投资机会",
+                session_id="session-investment",
+                session_title="Investment session",
+                session_turn=2,
                 status="done",
                 created_at="2026-07-04T10:20:00+00:00",
                 updated_at="2026-07-04T10:40:00+00:00",
@@ -46,6 +53,9 @@ class DemoPipelineTests(unittest.TestCase):
                 runs_dir,
                 run_id="run-other",
                 goal="unrelated task",
+                session_id="session-other",
+                session_title="Other session",
+                session_turn=1,
                 status="done",
                 created_at="2026-07-04T09:00:00+00:00",
                 updated_at="2026-07-04T09:10:00+00:00",
@@ -59,9 +69,13 @@ class DemoPipelineTests(unittest.TestCase):
 
             self.assertEqual([record.run_id for record in selected], ["run-a", "run-b"])
             self.assertEqual(choose_primary_run(selected).run_id, "run-b")
+            self.assertEqual(
+                [record.run_id for record in select_session_runs(records, query=None, session_id="session-investment")],
+                ["run-a", "run-b"],
+            )
 
             _write_text(output_dir / "artifacts" / "plan-stale-round-1.json", "{}")
-            generate_demo(selected, output_dir=output_dir, title="Demo", query="投资机会")
+            generate_demo(selected, output_dir=output_dir, title="Demo", query="session-investment")
 
             timeline = (output_dir / "01-session-timeline.md").read_text(encoding="utf-8")
             planner = (output_dir / "02-planner-decisions.md").read_text(encoding="utf-8")
@@ -80,8 +94,63 @@ class DemoPipelineTests(unittest.TestCase):
             self.assertIn("insufficient_evidence", verifiers)
             self.assertIn("Source run: `run-b`", final_report)
             self.assertEqual(session["session"]["run_count"], 2)
+            self.assertEqual(session["session"]["session_id"], "session-investment")
+            self.assertEqual(session["session"]["session_title"], "Investment session")
             self.assertEqual(session["session"]["primary_run_id"], "run-b")
             self.assertFalse((output_dir / "artifacts" / "plan-stale-round-1.json").exists())
+
+    def test_resolves_default_demo_output_by_session_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs_dir = root / "runs"
+            _write_run(
+                runs_dir,
+                run_id="run-a",
+                goal="分析当下潜在的投资机会",
+                session_id="session-20260705-190415-c9984f98",
+                session_title="Investment session",
+                session_turn=1,
+                status="done",
+                created_at="2026-07-04T10:00:00+00:00",
+                updated_at="2026-07-04T10:10:00+00:00",
+                final=True,
+                claim="claim",
+                verdict="accepted",
+            )
+
+            records = load_run_records(runs_dir)
+            output_dir = resolve_output_dir(
+                records,
+                output=None,
+                output_root=root / "docs" / "demos",
+                query="",
+            )
+
+            self.assertEqual(output_dir, root / "docs" / "demos" / "session-20260705-190415-c9984f98")
+
+    def test_explicit_demo_output_overrides_session_grouping(self) -> None:
+        record = _sample_record(session_id="session-demo")
+
+        output_dir = resolve_output_dir(
+            [record],
+            output="docs/demos/custom-demo",
+            output_root=Path("docs/demos"),
+            query="",
+        )
+
+        self.assertEqual(output_dir, Path("docs/demos/custom-demo"))
+
+    def test_resolves_default_demo_output_without_explicit_session_id(self) -> None:
+        record = _sample_record(session_id="", session_title="投资机会 demo/session")
+
+        output_dir = resolve_output_dir(
+            [record],
+            output=None,
+            output_root=Path("docs/demos"),
+            query="",
+        )
+
+        self.assertEqual(output_dir, Path("docs/demos") / "投资机会-demo-session")
 
 
 def _write_run(
@@ -95,6 +164,9 @@ def _write_run(
     final: bool,
     claim: str,
     verdict: str,
+    session_id: str = "",
+    session_title: str = "",
+    session_turn: int | None = None,
 ) -> None:
     run_dir = runs_dir / run_id
     (run_dir / "plans").mkdir(parents=True)
@@ -104,6 +176,9 @@ def _write_run(
         run_dir / "state.json",
         {
             "run_id": run_id,
+            "session_id": session_id,
+            "session_title": session_title,
+            "session_turn": session_turn,
             "goal": goal,
             "status": status,
             "current_round": 1,
@@ -189,6 +264,26 @@ def _write_run(
     )
     if final:
         _write_text(run_dir / "final.md", "# Final Report\n\nSession final output.\n")
+
+
+def _sample_record(*, session_id: str, session_title: str = ""):
+    from dynamic_workflows_agent.demo_pipeline import RunRecord
+
+    return RunRecord(
+        run_id="run-sample",
+        path=Path("runs/run-sample"),
+        goal="sample goal",
+        status="done",
+        created_at="2026-07-04T10:00:00+00:00",
+        updated_at="2026-07-04T10:10:00+00:00",
+        current_round=1,
+        completed_subtasks=1,
+        completed_verifications=1,
+        has_final=True,
+        session_id=session_id,
+        session_title=session_title,
+        session_turn=1,
+    )
 
 
 def _write_json(path: Path, value: dict[str, object]) -> None:

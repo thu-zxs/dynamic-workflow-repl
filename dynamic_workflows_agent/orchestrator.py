@@ -5,6 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 from .agents import SynthesizerAgent, VerifierAgent, WorkerAgent
+from .context import compact_session_for_prompt
 from .llm import llm_context
 from .models import Event, Finding, VerificationResult, WorkflowPlan
 from .planner import PlannerAgent
@@ -42,56 +43,63 @@ class WorkflowOrchestrator:
         conversation: list[dict[str, str]] | None = None,
         run_id: str | None = None,
         resume: bool = False,
+        session_id: str | None = None,
+        session_title: str | None = None,
     ) -> str:
         if resume:
             if not run_id:
                 raise ValueError("run_id is required when resume=True")
             state = self.store.load_state(run_id)
             goal = str(state["goal"])
-            self._emit(run_id, "resume", f"resuming workflow {run_id}", {"goal": goal})
+            self._emit(
+                run_id,
+                "resume",
+                f"resuming workflow {run_id}",
+                {"goal": goal, "session_id": state.get("session_id"), "session_turn": state.get("session_turn")},
+            )
             if state.get("status") == "done" and self.store.has_final(run_id):
                 self._emit(run_id, "complete", "workflow already completed")
                 return self.store.load_final(run_id)
         else:
-            state = self.store.create_run(goal)
+            state = self.store.create_run(goal, session_id=session_id, session_title=session_title)
             run_id = str(state["run_id"])
-            self._emit(run_id, "created", f"created workflow run for: {goal[:90]}", {"goal": goal})
+            self._emit(
+                run_id,
+                "created",
+                f"created workflow run for: {goal[:90]}",
+                {
+                    "goal": goal,
+                    "session_id": state.get("session_id"),
+                    "session_turn": state.get("session_turn"),
+                    "session_title": state.get("session_title"),
+                },
+            )
 
         state = self.store.load_state(run_id)
+        session_context = compact_session_for_prompt(self.store.load_session(str(state.get("session_id") or "")))
         round_index = int(state.get("current_round", 1))
 
         plan = self._load_plan_if_present(run_id, round_index)
         if plan is None:
-            state["status"] = "planning"
-            state["current_round"] = round_index
-            self.store.save_state(run_id, state)
-            self._emit(run_id, "planning", "asking planner for a dynamic workflow", {"goal": goal})
-            with llm_context(
-                run_id=run_id,
-                component="planner",
-                label="Planner",
-                round_index=round_index,
-            ):
-                plan = await self.planner.create_plan(goal=goal, conversation=conversation or [])
-            self.store.save_plan(run_id, plan, round_index=round_index)
-            self._emit(
-                run_id,
-                "planned",
-                f"planned {len(plan.subtasks)} subtasks, {len(plan.parallel_groups)} group(s), "
-                f"{len(plan.verification_steps)} verification step(s)",
-                {
-                    "round_index": round_index,
-                    "subtask_count": len(plan.subtasks),
-                    "parallel_group_count": len(plan.parallel_groups),
-                    "verification_step_count": len(plan.verification_steps),
-                    "plan": plan.to_dict(),
-                },
-            )
-            if self.confirm_callback is not None and not self.confirm_callback(plan):
-                state["status"] = "cancelled"
-                self.store.save_state(run_id, state)
-                self._emit(run_id, "cancelled", "workflow cancelled before execution")
-                return "Workflow cancelled before execution."
+            if round_index > 1:
+                plan = await self._resume_missing_followup_plan(
+                    run_id=run_id,
+                    goal=goal,
+                    round_index=round_index,
+                )
+            else:
+                plan = await self._create_initial_plan(
+                    run_id=run_id,
+                    goal=goal,
+                    conversation=conversation or [],
+                    session_context=session_context,
+                    round_index=round_index,
+                )
+                if self.confirm_callback is not None and not self.confirm_callback(plan):
+                    state["status"] = "cancelled"
+                    self.store.save_state(run_id, state)
+                    self._emit(run_id, "cancelled", "workflow cancelled before execution")
+                    return "Workflow cancelled before execution."
 
         max_rounds = plan.convergence_policy.max_rounds
         while True:
@@ -106,7 +114,11 @@ class WorkflowOrchestrator:
                 f"starting workflow round {round_index}",
                 {"round_index": round_index},
             )
-            await self._execute_round(run_id=run_id, round_index=round_index, plan=plan)
+            try:
+                await self._execute_round(run_id=run_id, round_index=round_index, plan=plan)
+            except Exception as exc:
+                self._mark_failed(run_id, exc, phase="running", round_index=round_index)
+                raise
 
             findings = self.store.load_findings(run_id)
             verifications = self.store.load_verifications(run_id)
@@ -131,21 +143,26 @@ class WorkflowOrchestrator:
                     "creating final coordinated report",
                     {"round_index": round_index},
                 )
-                with llm_context(
-                    run_id=run_id,
-                    component="synthesizer",
-                    label="Synthesizer",
-                    round_index=round_index,
-                ):
-                    report = await self.synthesizer.run(
-                        goal=goal,
-                        findings=findings,
-                        verifications=verifications,
-                        unresolved_summary=unresolved,
-                    )
+                try:
+                    with llm_context(
+                        run_id=run_id,
+                        component="synthesizer",
+                        label="Synthesizer",
+                        round_index=round_index,
+                    ):
+                        report = await self.synthesizer.run(
+                            goal=goal,
+                            findings=findings,
+                            verifications=verifications,
+                            unresolved_summary=unresolved,
+                        )
+                except Exception as exc:
+                    self._mark_failed(run_id, exc, phase="synthesizing", round_index=round_index)
+                    raise
                 self.store.save_final(run_id, report)
                 state["status"] = "done"
                 self.store.save_state(run_id, state)
+                self.store.append_session_turn(run_id, report)
                 self._emit(
                     run_id,
                     "complete",
@@ -165,19 +182,23 @@ class WorkflowOrchestrator:
                 f"round {round_index - 1} did not converge; asking planner for follow-up subtasks",
                 {"round_index": round_index - 1, "next_round_index": round_index, "unresolved": unresolved},
             )
-            with llm_context(
-                run_id=run_id,
-                component="planner",
-                label=f"Planner r{round_index}",
-                round_index=round_index,
-            ):
-                plan = await self.planner.create_followup_plan(
-                    goal=goal,
-                    prior_plan=plan,
-                    findings=[item.to_dict() for item in findings],
-                    verifications=[item.to_dict() for item in verifications],
-                    unresolved_summary=unresolved,
-                )
+            try:
+                with llm_context(
+                    run_id=run_id,
+                    component="planner",
+                    label=f"Planner r{round_index}",
+                    round_index=round_index,
+                ):
+                    plan = await self.planner.create_followup_plan(
+                        goal=goal,
+                        prior_plan=plan,
+                        findings=[item.to_dict() for item in findings],
+                        verifications=[item.to_dict() for item in verifications],
+                        unresolved_summary=unresolved,
+                    )
+            except Exception as exc:
+                self._mark_failed(run_id, exc, phase="planning_followup", round_index=round_index)
+                raise
             self.store.save_plan(run_id, plan, round_index=round_index)
             max_rounds = max(max_rounds, plan.convergence_policy.max_rounds)
             self._emit(
@@ -192,6 +213,103 @@ class WorkflowOrchestrator:
                     "plan": plan.to_dict(),
                 },
             )
+
+    async def _create_initial_plan(
+        self,
+        *,
+        run_id: str,
+        goal: str,
+        conversation: list[dict[str, str]],
+        session_context: dict[str, Any],
+        round_index: int,
+    ) -> WorkflowPlan:
+        state = self.store.load_state(run_id)
+        state["status"] = "planning"
+        state["current_round"] = round_index
+        self.store.save_state(run_id, state)
+        self._emit(run_id, "planning", "asking planner for a dynamic workflow", {"goal": goal})
+        try:
+            with llm_context(
+                run_id=run_id,
+                component="planner",
+                label="Planner",
+                round_index=round_index,
+            ):
+                plan = await self.planner.create_plan(
+                    goal=goal,
+                    conversation=conversation,
+                    session_context=session_context,
+                )
+        except Exception as exc:
+            self._mark_failed(run_id, exc, phase="planning", round_index=round_index)
+            raise
+        self.store.save_plan(run_id, plan, round_index=round_index)
+        self._emit_planned(run_id, plan, round_index=round_index)
+        return plan
+
+    async def _resume_missing_followup_plan(self, *, run_id: str, goal: str, round_index: int) -> WorkflowPlan:
+        previous_round = max(1, round_index - 1)
+        prior_plan = self.store.load_plan(run_id, round_index=previous_round)
+        findings = self.store.load_findings(run_id)
+        verifications = self.store.load_verifications(run_id)
+        _, unresolved = self._evaluate_convergence(prior_plan, findings, verifications)
+        state = self.store.load_state(run_id)
+        state["status"] = "planning_followup"
+        state["current_round"] = round_index
+        self.store.save_state(run_id, state)
+        self._emit(
+            run_id,
+            "resume_plan",
+            f"round {round_index} plan missing; regenerating follow-up plan",
+            {"round_index": round_index, "previous_round": previous_round, "unresolved": unresolved},
+        )
+        try:
+            with llm_context(
+                run_id=run_id,
+                component="planner",
+                label=f"Planner r{round_index}",
+                round_index=round_index,
+            ):
+                plan = await self.planner.create_followup_plan(
+                    goal=goal,
+                    prior_plan=prior_plan,
+                    findings=[item.to_dict() for item in findings],
+                    verifications=[item.to_dict() for item in verifications],
+                    unresolved_summary=unresolved,
+                )
+        except Exception as exc:
+            self._mark_failed(run_id, exc, phase="planning_followup", round_index=round_index)
+            raise
+        self.store.save_plan(run_id, plan, round_index=round_index)
+        self._emit_planned(run_id, plan, round_index=round_index, followup=True)
+        return plan
+
+    def _emit_planned(
+        self,
+        run_id: str,
+        plan: WorkflowPlan,
+        *,
+        round_index: int,
+        followup: bool = False,
+    ) -> None:
+        message = (
+            f"planned follow-up round with {len(plan.subtasks)} subtasks"
+            if followup
+            else f"planned {len(plan.subtasks)} subtasks, {len(plan.parallel_groups)} group(s), "
+            f"{len(plan.verification_steps)} verification step(s)"
+        )
+        self._emit(
+            run_id,
+            "planned",
+            message,
+            {
+                "round_index": round_index,
+                "subtask_count": len(plan.subtasks),
+                "parallel_group_count": len(plan.parallel_groups),
+                "verification_step_count": len(plan.verification_steps),
+                "plan": plan.to_dict(),
+            },
+        )
 
     async def _execute_round(self, *, run_id: str, round_index: int, plan: WorkflowPlan) -> None:
         state = self.store.load_state(run_id)
@@ -274,8 +392,10 @@ class WorkflowOrchestrator:
                     return finding
 
             tasks = [asyncio.create_task(run_one(subtask.id)) for subtask in runnable]
-            for task in asyncio.as_completed(tasks):
-                await task
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            failures = [result for result in results if isinstance(result, Exception)]
+            if failures:
+                raise failures[0]
 
         findings = self.store.load_findings(run_id)
         for step in plan.verification_steps:
@@ -371,6 +491,25 @@ class WorkflowOrchestrator:
             return self.store.load_plan(run_id, round_index=round_index)
         except (FileNotFoundError, ValueError):
             return None
+
+    def _mark_failed(self, run_id: str, exc: Exception, *, phase: str, round_index: int) -> None:
+        state = self.store.load_state(run_id)
+        state["status"] = "failed"
+        state["failed_phase"] = phase
+        state["failed_round"] = round_index
+        state["last_error"] = f"{type(exc).__name__}: {exc}"
+        self.store.save_state(run_id, state)
+        self._emit(
+            run_id,
+            "failed",
+            f"{phase} failed: {exc}",
+            {
+                "round_index": round_index,
+                "phase": phase,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+        )
 
     def _emit(self, run_id: str, kind: str, message: str, data: dict[str, Any] | None = None) -> None:
         self.event_bus.emit(Event(run_id=run_id, kind=kind, message=message, data=data or {}))

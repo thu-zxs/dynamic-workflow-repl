@@ -52,6 +52,8 @@ class RunRecord:
     completed_verifications: int
     has_final: bool
     session_id: str
+    session_title: str
+    session_turn: int | None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -61,8 +63,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--session-id", help="Select runs with this explicit session_id in state.json.")
     parser.add_argument(
         "--output",
-        default="docs/demos/investment-opportunities",
-        help="Output directory for generated demo markdown and curated artifacts.",
+        help="Exact output directory. Defaults to <output-root>/<session_id-or-inferred-session-key>.",
+    )
+    parser.add_argument(
+        "--output-root",
+        default="docs/demos",
+        help="Root directory used when --output is omitted.",
     )
     parser.add_argument("--title", default="Investment Opportunities Dynamic Workflow Demo", help="Demo title.")
     parser.add_argument("--list-sessions", action="store_true", help="List inferred sessions and exit.")
@@ -78,7 +84,12 @@ def main(argv: list[str] | None = None) -> int:
     if not selected:
         raise SystemExit("no matching runs found; pass --query, --session-id, or use --list-sessions")
 
-    output_dir = Path(args.output)
+    output_dir = resolve_output_dir(
+        selected,
+        output=args.output,
+        output_root=Path(args.output_root),
+        query=args.query or args.session_id or "",
+    )
     generate_demo(selected, output_dir=output_dir, title=args.title, query=args.query or args.session_id or "")
     print(f"generated demo for {len(selected)} run(s): {output_dir}")
     return 0
@@ -97,6 +108,7 @@ def load_run_records(runs_dir: Path) -> list[RunRecord]:
         run_id = str(state.get("run_id") or run_dir.name)
         completed_subtasks = state.get("completed_subtasks")
         completed_verifications = state.get("completed_verifications")
+        session_turn = state.get("session_turn")
         records.append(
             RunRecord(
                 run_id=run_id,
@@ -112,6 +124,8 @@ def load_run_records(runs_dir: Path) -> list[RunRecord]:
                 ),
                 has_final=(run_dir / "final.md").exists(),
                 session_id=str(state.get("session_id") or ""),
+                session_title=str(state.get("session_title") or ""),
+                session_turn=session_turn if isinstance(session_turn, int) else None,
             )
         )
     return records
@@ -126,6 +140,24 @@ def select_session_runs(records: list[RunRecord], *, query: str | None, session_
     else:
         return []
     return sorted(selected, key=lambda record: (record.created_at, record.run_id))
+
+
+def resolve_output_dir(
+    records: list[RunRecord],
+    *,
+    output: str | None,
+    output_root: Path,
+    query: str,
+) -> Path:
+    if output:
+        return Path(output)
+    session_key = _common_value(record.session_id for record in records)
+    if not session_key:
+        session_key = _common_value(record.session_title for record in records)
+    if not session_key:
+        primary = choose_primary_run(records)
+        session_key = query or primary.goal or primary.run_id
+    return output_root / _path_segment(session_key)
 
 
 def generate_demo(records: list[RunRecord], *, output_dir: Path, title: str, query: str) -> None:
@@ -202,6 +234,8 @@ def choose_primary_run(records: list[RunRecord]) -> RunRecord:
 def build_session_summary(records: list[RunRecord], *, primary: RunRecord, query: str) -> dict[str, Any]:
     return {
         "query": query,
+        "session_id": _common_value(record.session_id for record in records),
+        "session_title": _common_value(record.session_title for record in records),
         "primary_run_id": primary.run_id,
         "run_count": len(records),
         "started_at": min((record.created_at for record in records if record.created_at), default=""),
@@ -245,6 +279,8 @@ def run_record_to_dict(record: RunRecord) -> dict[str, Any]:
         "has_final": record.has_final,
         "path": str(record.path),
         "session_id": record.session_id,
+        "session_title": record.session_title,
+        "session_turn": record.session_turn,
     }
 
 
@@ -395,6 +431,8 @@ def render_demo_readme(title: str, session: dict[str, Any], primary: RunRecord) 
             "## Session",
             "",
             f"- Query/session selector: `{session.get('query') or '-'}`",
+            f"- Session ID: `{session.get('session_id') or '-'}`",
+            f"- Session title: {session.get('session_title') or '-'}",
             f"- Primary run: `{primary.run_id}`",
             f"- Runs included: {session.get('run_count')}",
             f"- Time window: {_short_time(session.get('started_at'))} to {_short_time(session.get('ended_at'))}",
@@ -431,9 +469,12 @@ def render_session_timeline(title: str, session: dict[str, Any], events: list[di
         "|---|---|---:|---:|---:|---|---|",
     ]
     for record in session.get("runs", []):
+        run_label = f"`{record.get('run_id', '')}`"
+        if record.get("session_turn"):
+            run_label = f"{run_label}<br>turn {record.get('session_turn')}"
         lines.append(
             "| {run_id} | {status} | {round} | {findings} | {verifications} | {final} | {goal} |".format(
-                run_id=record.get("run_id", ""),
+                run_id=run_label,
                 status=record.get("status", ""),
                 round=record.get("current_round") or "-",
                 findings=record.get("completed_subtasks") or 0,
@@ -744,8 +785,9 @@ def format_session_list(records: list[RunRecord]) -> str:
     lines = ["Inferred sessions:", ""]
     for key, group in sorted(groups.items(), key=lambda item: (item[1][0].created_at, item[0])):
         primary = choose_primary_run(group)
+        title = _common_value(record.session_title for record in group) or primary.goal
         lines.append(f"- {key or '(empty)'}")
-        lines.append(f"  runs: {len(group)}; primary: {primary.run_id}; goal: {primary.goal}")
+        lines.append(f"  runs: {len(group)}; primary: {primary.run_id}; title: {title}")
     return "\n".join(lines)
 
 
@@ -810,6 +852,23 @@ def _round_sort_key(path: Path) -> tuple[int, str]:
 
 def _normalize_goal(value: str) -> str:
     return re.sub(r"\s+", "", value.strip().lower())
+
+
+def _path_segment(value: str) -> str:
+    text = re.sub(r"\s+", "-", value.strip())
+    text = re.sub(r"[^A-Za-z0-9._\-\u4e00-\u9fff]+", "-", text)
+    text = re.sub(r"-+", "-", text).strip(".-")
+    return text[:120] or "session"
+
+
+def _common_value(values: Any) -> str:
+    strings = [str(value) for value in values if str(value or "").strip()]
+    if not strings:
+        return ""
+    first = strings[0]
+    if all(value == first for value in strings):
+        return first
+    return ""
 
 
 def _short_time(value: Any) -> str:

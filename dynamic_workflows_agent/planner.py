@@ -3,9 +3,15 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .context import compact_conversation, compact_findings, compact_verifications
 from .llm import LLMClient
 from .models import WorkflowPlan
-from .validator import PlanValidationError, plan_repair_instructions, validate_workflow_plan
+from .validator import (
+    PlanValidationError,
+    plan_repair_instructions,
+    repair_workflow_plan_structure,
+    validate_workflow_plan,
+)
 
 
 PLANNER_SYSTEM = """You are a dynamic workflow planner for a terminal agent.
@@ -55,6 +61,10 @@ Rules:
 - Include verifier or refuter steps that challenge findings before synthesis.
 - Dependencies are allowed only when a subtask depends on an earlier parallel group.
 - Keep worker outputs limited to structured findings; final writing happens later.
+- If SESSION_CONTEXT_JSON is present, treat the user task as the latest turn in
+  that session. If the user critiques or modifies a previous result, create a
+  workflow that directly addresses the requested revision instead of starting
+  from scratch.
 """
 
 
@@ -62,11 +72,19 @@ class PlannerAgent:
     def __init__(self, llm: LLMClient) -> None:
         self.llm = llm
 
-    async def create_plan(self, *, goal: str, conversation: list[dict[str, str]] | None = None) -> WorkflowPlan:
+    async def create_plan(
+        self,
+        *,
+        goal: str,
+        conversation: list[dict[str, str]] | None = None,
+        session_context: dict[str, Any] | None = None,
+    ) -> WorkflowPlan:
         user = (
             f"USER_TASK:\n{goal}\n\n"
+            "SESSION_CONTEXT_JSON:\n"
+            f"{json.dumps(session_context or {}, ensure_ascii=False)}\n\n"
             "CONVERSATION_CONTEXT_JSON:\n"
-            f"{json.dumps(conversation or [], ensure_ascii=False)}\n\n"
+            f"{json.dumps(compact_conversation(conversation), ensure_ascii=False)}\n\n"
             "Create a dynamic workflow plan in JSON for this task."
         )
         return await self._call_and_validate(user)
@@ -87,10 +105,10 @@ class PlannerAgent:
             "still using 3-10 independent subagents in each parallel group.\n\n"
             "PRIOR_PLAN_JSON:\n"
             f"{json.dumps(prior_plan.to_dict(), ensure_ascii=False)}\n\n"
-            "FINDINGS_JSON:\n"
-            f"{json.dumps(findings, ensure_ascii=False)}\n\n"
-            "VERIFICATIONS_JSON:\n"
-            f"{json.dumps(verifications, ensure_ascii=False)}\n\n"
+            "COMPACT_FINDINGS_JSON:\n"
+            f"{json.dumps(compact_findings(findings), ensure_ascii=False)}\n\n"
+            "COMPACT_VERIFICATIONS_JSON:\n"
+            f"{json.dumps(compact_verifications(verifications), ensure_ascii=False)}\n\n"
             "UNRESOLVED_SUMMARY_JSON:\n"
             f"{json.dumps(unresolved_summary, ensure_ascii=False)}\n\n"
             "Return corrected follow-up workflow JSON only."
@@ -122,5 +140,10 @@ class PlannerAgent:
             try:
                 return validate_workflow_plan(repaired)
             except PlanValidationError as second_error:
+                for candidate in (repaired, raw):
+                    try:
+                        return repair_workflow_plan_structure(candidate)
+                    except PlanValidationError:
+                        pass
                 combined = first_error.errors + second_error.errors
                 raise PlanValidationError(combined) from second_error

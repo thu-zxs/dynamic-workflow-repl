@@ -87,6 +87,147 @@ def validate_workflow_plan(value: Any) -> WorkflowPlan:
     return plan
 
 
+def repair_workflow_plan_structure(value: Any) -> WorkflowPlan:
+    """Repair model-generated scheduling structure without changing task text.
+
+    The model occasionally emits a reasonable set of subtasks but illegal
+    orchestration metadata: missing group membership, tiny serial groups, or
+    dependencies that point within the same group. This function preserves the
+    subtask definitions and rewrites only groups, invalid dependencies, and
+    verifier targets so the plan satisfies the local execution protocol.
+    """
+
+    try:
+        plan = WorkflowPlan.from_dict(value)
+    except SchemaError as exc:
+        raise PlanValidationError([str(exc)]) from exc
+
+    data = plan.to_dict()
+    subtasks = data.get("subtasks") if isinstance(data.get("subtasks"), list) else []
+    subtask_ids = [str(item.get("id") or "") for item in subtasks if isinstance(item, dict) and item.get("id")]
+    if len(subtask_ids) < 3:
+        raise PlanValidationError(["plan must include at least three subtasks"])
+    if len(set(subtask_ids)) != len(subtask_ids):
+        raise PlanValidationError(["subtask IDs must be unique"])
+
+    groups = _build_repaired_groups(subtasks)
+    group_index_by_subtask = {
+        subtask_id: group_index
+        for group_index, group in enumerate(groups)
+        for subtask_id in group["subtask_ids"]
+    }
+    known_ids = set(subtask_ids)
+
+    for subtask in subtasks:
+        subtask_id = str(subtask.get("id") or "")
+        dependencies = subtask.get("depends_on") if isinstance(subtask.get("depends_on"), list) else []
+        repaired_dependencies: list[str] = []
+        for dependency_id in dependencies:
+            dependency_id = str(dependency_id)
+            if dependency_id not in known_ids or dependency_id == subtask_id:
+                continue
+            if group_index_by_subtask.get(dependency_id, 0) >= group_index_by_subtask.get(subtask_id, 0):
+                continue
+            if dependency_id not in repaired_dependencies:
+                repaired_dependencies.append(dependency_id)
+        subtask["depends_on"] = repaired_dependencies
+
+    data["parallel_groups"] = groups
+    data["verification_steps"] = _repair_verification_steps(data.get("verification_steps"), subtask_ids)
+    return validate_workflow_plan(data)
+
+
+def _build_repaired_groups(subtasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    subtask_ids = [str(item["id"]) for item in subtasks]
+    dependency_by_id = {
+        str(item["id"]): [
+            str(dependency)
+            for dependency in item.get("depends_on", [])
+            if str(dependency) in set(subtask_ids) and str(dependency) != str(item["id"])
+        ]
+        for item in subtasks
+    }
+
+    pending = list(subtask_ids)
+    resolved: set[str] = set()
+    grouped: list[list[str]] = []
+    while pending:
+        ready = [subtask_id for subtask_id in pending if all(dep in resolved for dep in dependency_by_id[subtask_id])]
+        if not ready:
+            ready = list(pending)
+        group = ready[:10]
+        if len(group) < 3 and len(pending) > len(group):
+            for subtask_id in pending:
+                if subtask_id not in group:
+                    group.append(subtask_id)
+                if len(group) >= 3:
+                    break
+        for subtask_id in group:
+            if subtask_id in pending:
+                pending.remove(subtask_id)
+        grouped.append(group)
+        resolved.update(group)
+
+    grouped = _rebalance_small_final_group(grouped)
+    return [
+        {
+            "id": f"G{index}",
+            "subtask_ids": group,
+            "max_concurrency": min(10, max(3, len(group))),
+        }
+        for index, group in enumerate(grouped, start=1)
+    ]
+
+
+def _rebalance_small_final_group(groups: list[list[str]]) -> list[list[str]]:
+    if not groups:
+        return groups
+    while len(groups) >= 2 and len(groups[-1]) < 3:
+        final = groups[-1]
+        previous = groups[-2]
+        if len(previous) + len(final) <= 10:
+            groups[-2] = previous + final
+            groups.pop()
+            continue
+        while len(final) < 3 and len(previous) > 3:
+            final.insert(0, previous.pop())
+        if len(final) < 3:
+            break
+    return groups
+
+
+def _repair_verification_steps(value: Any, subtask_ids: list[str]) -> list[dict[str, Any]]:
+    steps = value if isinstance(value, list) else []
+    repaired: list[dict[str, Any]] = []
+    used_ids: set[str] = set()
+    for index, item in enumerate(steps, start=1):
+        if not isinstance(item, dict):
+            continue
+        step_id = str(item.get("id") or f"V{index}")
+        if step_id in used_ids:
+            step_id = f"V{index}"
+        used_ids.add(step_id)
+        mode = str(item.get("mode") or "refute").lower()
+        if mode not in {"verify", "refute", "adversarial", "cross_check", "review"}:
+            mode = "refute"
+        targets = item.get("target_subtask_ids") if isinstance(item.get("target_subtask_ids"), list) else []
+        targets = [str(target) for target in targets if str(target) in set(subtask_ids)]
+        if not targets:
+            targets = list(subtask_ids)
+        prompt = str(item.get("prompt") or "Challenge the findings and identify weak evidence.")
+        repaired.append({"id": step_id, "target_subtask_ids": targets, "mode": mode, "prompt": prompt})
+    if not repaired:
+        repaired.append(
+            {
+                "id": "V1",
+                "target_subtask_ids": list(subtask_ids),
+                "mode": "refute",
+                "prompt": "Challenge every finding and flag weak evidence before synthesis.",
+            }
+        )
+    return repaired
+
+
 def _has_dependency_cycle(plan: WorkflowPlan) -> bool:
     graph = {subtask.id: list(subtask.depends_on) for subtask in plan.subtasks}
     visiting: set[str] = set()

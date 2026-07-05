@@ -69,6 +69,8 @@ events arrive.
 /runs
 /resume <run_id>
 /inspect [run_id]
+/session
+/session new [name]
 /status
 /config
 /exit
@@ -92,19 +94,41 @@ Resume a run from the REPL:
 /resume 20260703-174500-abc12345
 ```
 
+If a run fails mid-workflow, `/resume <run_id>` continues from the checkpointed
+state. Completed worker findings and verifier results are skipped, failed or
+missing items are retried, and a missing follow-up round plan is regenerated
+from the previous round's findings and verification results.
+
+Each REPL process starts with a workflow session ID. Every task you submit in
+that REPL is checkpointed with the same `session_id`, a stable `session_title`,
+and an incrementing `session_turn`. Use `/session` to show the current session
+and `/session new [name]` to start a fresh one.
+
+After a workflow reaches the final summary, keep typing in the same REPL to
+continue from that result. User feedback such as "revise the recommendations",
+"focus on China instead", or "challenge the risky assumptions" becomes the next
+session turn. The planner receives compressed context from prior turns and
+generates a fresh dynamic workflow for the requested revision.
+
+One-shot tasks can also be attached to a known session:
+
+```bash
+python3 -m dynamic_workflows_agent --yes --session-id session-investment-demo --task "分析当下潜在的投资机会"
+```
+
 ## Generate Demo from Runs
 
 Use the standalone demo pipeline to turn checkpointed runs into a Git-friendly
 case study:
 
 ```bash
-python3 -m dynamic_workflows_agent.demo_pipeline --query "分析当下潜在的投资机会" --output docs/demos/investment-opportunities
+python3 -m dynamic_workflows_agent.demo_pipeline --query "分析当下潜在的投资机会"
 ```
 
 The installed console script is equivalent:
 
 ```bash
-dynamic-workflows-demo --query "分析当下潜在的投资机会" --output docs/demos/investment-opportunities
+dynamic-workflows-demo --query "分析当下潜在的投资机会"
 ```
 
 The pipeline is session-oriented. It selects all matching run folders, chooses
@@ -114,7 +138,19 @@ verifier decisions, and structured artifacts. Use `--list-sessions` to inspect
 inferred sessions, or `--session-id <id>` when run state files contain an
 explicit `session_id`.
 
-Generated output is written under the chosen `docs/demos/...` directory:
+When a session ID exists, prefer it over fuzzy text matching:
+
+```bash
+dynamic-workflows-demo --session-id session-investment-demo
+```
+
+By default, generated output is grouped by session under
+`docs/demos/<session_id>/`. If run state does not contain an explicit
+`session_id`, the pipeline falls back to a sanitized inferred session key. Use
+`--output docs/demos/custom-name` to override the exact directory, or
+`--output-root <dir>` to keep session grouping under a different root.
+
+Each session directory contains:
 
 - `README.md`
 - `01-session-timeline.md`
@@ -165,6 +201,7 @@ Environment variables:
 - `DEEPSEEK_BASE_URL`, default `https://api.deepseek.com`
 - `DEEPSEEK_TIMEOUT`, default `60`
 - `DEEPSEEK_MAX_RETRIES`, default `3`
+- `DEEPSEEK_JSON_REPAIR_RETRIES`, default `2`
 
 ## Worker Tools
 
@@ -195,3 +232,15 @@ The program fixes the orchestration protocol, not the task workflow. The
 planner model generates subtasks, parallel groups, verification strategy, and
 follow-up rounds at runtime. The local code only validates the plan, executes
 it, persists progress, and enforces concurrency and verification boundaries.
+
+## Context Compression
+
+The agent uses deterministic context compression in two places:
+
+- Between user turns in the same session, completed final reports are reduced
+  into `runs/_sessions/<session_id>.json` as a rolling summary plus recent turn
+  records. The next planner call receives that compact session context.
+- Between workflow rounds, follow-up planning, verification, and synthesis use
+  compact finding/verifier payloads. Full raw findings and tool results remain
+  on disk, but model prompts receive bounded summaries with claims, evidence,
+  limitations, confidence, and tool-call counts.

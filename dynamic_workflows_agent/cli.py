@@ -30,6 +30,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--quiet", action="store_true", help="Hide realtime event output")
     parser.add_argument("--runs-dir", default="runs", help="Checkpoint directory")
+    parser.add_argument("--session-id", help="Attach new runs to this workflow session")
+    parser.add_argument("--session-title", help="Human-readable title stored with new run checkpoints")
     args = parser.parse_args(argv)
 
     try:
@@ -68,7 +70,14 @@ def main(argv: list[str] | None = None) -> int:
             key_controller = DashboardKeyController(dashboard_renderer)
             key_controller.start()
         try:
-            report = asyncio.run(orchestrator.run(goal=args.task, conversation=[]))
+            report = asyncio.run(
+                orchestrator.run(
+                    goal=args.task,
+                    conversation=[],
+                    session_id=args.session_id,
+                    session_title=args.session_title,
+                )
+            )
         finally:
             if key_controller is not None:
                 key_controller.stop()
@@ -81,6 +90,8 @@ def main(argv: list[str] | None = None) -> int:
         auto_confirm=args.yes,
         dashboard_renderer=dashboard_renderer,
         input_reader=create_input_reader(history_path=store.root / ".repl_history"),
+        session_id=args.session_id,
+        session_title=args.session_title,
     )
     asyncio.run(repl.run())
     return 0

@@ -102,6 +102,7 @@ class DeepSeekClient:
         base_url: str = "https://api.deepseek.com",
         timeout: float = 60.0,
         max_retries: int = 3,
+        json_repair_retries: int = 2,
         temperature: float = 0.2,
         event_callback: LLMEventCallback | None = None,
     ) -> None:
@@ -112,6 +113,7 @@ class DeepSeekClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.max_retries = max_retries
+        self.json_repair_retries = max(0, json_repair_retries)
         self.temperature = temperature
         self.event_callback = event_callback
 
@@ -123,6 +125,7 @@ class DeepSeekClient:
             base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
             timeout=float(os.environ.get("DEEPSEEK_TIMEOUT", "60")),
             max_retries=int(os.environ.get("DEEPSEEK_MAX_RETRIES", "3")),
+            json_repair_retries=int(os.environ.get("DEEPSEEK_JSON_REPAIR_RETRIES", "2")),
         )
 
     def set_event_callback(self, callback: LLMEventCallback | None) -> None:
@@ -158,7 +161,12 @@ class DeepSeekClient:
         }
         data = self._post_chat(body=body, schema_name=schema_name)
         content = data["choices"][0]["message"]["content"]
-        return extract_json_object(content)
+        return self._extract_or_repair_json(
+            messages=body["messages"],
+            content=content,
+            schema_name=schema_name,
+            max_tokens=max_tokens,
+        )
 
     async def chat_json_with_tools(
         self,
@@ -215,7 +223,15 @@ class DeepSeekClient:
             calls = message.get("tool_calls") or []
             if not calls:
                 content = message.get("content") or ""
-                return extract_json_object(content), tool_results
+                return (
+                    self._extract_or_repair_json(
+                        messages=messages,
+                        content=content,
+                        schema_name=schema_name,
+                        max_tokens=max_tokens,
+                    ),
+                    tool_results,
+                )
 
             messages.append(message)
             for call in calls:
@@ -277,7 +293,65 @@ class DeepSeekClient:
             schema_name=schema_name,
         )
         content = data["choices"][0]["message"]["content"]
-        return extract_json_object(content), tool_results
+        return (
+            self._extract_or_repair_json(
+                messages=messages,
+                content=content,
+                schema_name=schema_name,
+                max_tokens=max_tokens,
+            ),
+            tool_results,
+        )
+
+    def _extract_or_repair_json(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        content: str,
+        schema_name: str,
+        max_tokens: int,
+    ) -> dict[str, Any]:
+        try:
+            return extract_json_object(content)
+        except LLMError as first_error:
+            last_error: LLMError = first_error
+
+        previous_content = content
+        for retry_index in range(1, self.json_repair_retries + 1):
+            self._emit_llm_event(
+                "llm_json_error",
+                f"{schema_name}: invalid JSON; requesting repair",
+                {
+                    "schema_name": schema_name,
+                    "json_retry": retry_index,
+                    "error": str(last_error),
+                    "invalid_excerpt": _truncate_for_prompt(previous_content, 500),
+                },
+            )
+            repair_messages = list(messages) + [
+                {"role": "assistant", "content": _truncate_for_prompt(previous_content, 6000)},
+                {
+                    "role": "user",
+                    "content": _json_repair_prompt(schema_name=schema_name, error=str(last_error)),
+                },
+            ]
+            data = self._post_chat(
+                body={
+                    "model": self.model,
+                    "messages": repair_messages,
+                    "response_format": {"type": "json_object"},
+                    "stream": False,
+                    "temperature": 0,
+                    "max_tokens": _repair_max_tokens(max_tokens, retry_index),
+                },
+                schema_name=schema_name,
+            )
+            previous_content = str(data["choices"][0]["message"].get("content") or "")
+            try:
+                return extract_json_object(previous_content)
+            except LLMError as exc:
+                last_error = exc
+        raise last_error
 
     def _post_chat(self, *, body: dict[str, Any], schema_name: str) -> dict[str, Any]:
         endpoint = f"{self.base_url}/chat/completions"
@@ -697,3 +771,26 @@ def _estimate_tokens(text: str) -> int:
     ascii_chars = sum(1 for char in text if ord(char) < 128)
     non_ascii_chars = len(text) - ascii_chars
     return max(1, int(ascii_chars / 4 + non_ascii_chars / 1.7))
+
+
+def _json_repair_prompt(*, schema_name: str, error: str) -> str:
+    return (
+        f"The previous response for schema `{schema_name}` was not a complete valid JSON object.\n"
+        f"Parser error: {error}\n\n"
+        "Return exactly one complete JSON object now. Do not include markdown, comments, code fences, "
+        "or explanatory text. Preserve the intended content from the previous response, but shorten "
+        "long prose fields if needed so the JSON closes cleanly."
+    )
+
+
+def _repair_max_tokens(max_tokens: int, retry_index: int) -> int:
+    expanded = int(max_tokens * (1.5 + retry_index * 0.5))
+    return min(16000, max(max_tokens + 1000, expanded))
+
+
+def _truncate_for_prompt(value: str, limit: int) -> str:
+    text = str(value or "")
+    if len(text) <= limit:
+        return text
+    half = max(1, limit // 2)
+    return text[:half].rstrip() + "\n... omitted ...\n" + text[-half:].lstrip()

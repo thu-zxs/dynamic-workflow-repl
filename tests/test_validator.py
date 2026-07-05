@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from dynamic_workflows_agent.validator import PlanValidationError, validate_workflow_plan
+from dynamic_workflows_agent.validator import PlanValidationError, repair_workflow_plan_structure, validate_workflow_plan
 
 
 def valid_plan() -> dict:
@@ -71,6 +71,47 @@ class PlanValidatorTests(unittest.TestCase):
         with self.assertRaises(PlanValidationError) as raised:
             validate_workflow_plan(data)
         self.assertIn("earlier parallel group", str(raised.exception))
+
+    def test_repair_schedules_missing_serial_subtasks_into_valid_groups(self) -> None:
+        data = {
+            "goal": "Continue prior investment analysis",
+            "success_criteria": ["Revise conclusions", "Verify revised findings"],
+            "subtasks": [
+                {
+                    "id": f"T{index}",
+                    "title": f"Worker {index}",
+                    "agent_role": f"role {index}",
+                    "prompt": f"Handle perspective {index}.",
+                    "depends_on": [],
+                    "expected_output": "finding",
+                }
+                for index in range(1, 11)
+            ],
+            "parallel_groups": [{"id": "G1", "subtask_ids": [f"T{index}" for index in range(1, 8)], "max_concurrency": 7}],
+            "verification_steps": [
+                {
+                    "id": "V1",
+                    "target_subtask_ids": [f"T{index}" for index in range(1, 11)],
+                    "mode": "refute",
+                    "prompt": "Challenge every finding.",
+                }
+            ],
+            "convergence_policy": {
+                "max_rounds": 3,
+                "min_confidence": 0.75,
+                "require_no_critical_disputes": True,
+            },
+        }
+        data["subtasks"][7]["depends_on"] = [f"T{index}" for index in range(1, 8)]
+        data["subtasks"][8]["depends_on"] = ["T8"]
+        data["subtasks"][9]["depends_on"] = ["T8", "T9"]
+
+        repaired = repair_workflow_plan_structure(data)
+
+        self.assertEqual([group.subtask_ids for group in repaired.parallel_groups], [[f"T{index}" for index in range(1, 8)], ["T8", "T9", "T10"]])
+        self.assertEqual(repaired.subtasks[7].depends_on, [f"T{index}" for index in range(1, 8)])
+        self.assertEqual(repaired.subtasks[8].depends_on, [])
+        self.assertEqual(repaired.subtasks[9].depends_on, [])
 
 
 if __name__ == "__main__":

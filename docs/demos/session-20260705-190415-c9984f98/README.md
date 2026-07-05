@@ -5,10 +5,12 @@
 
 ## Session
 
-- Query/session selector: `分析当下潜在的投资机会`
-- Primary run: `20260704-142802-8e87f907`
-- Runs included: 5
-- Time window: 2026-07-04 05:51:34 to 2026-07-04 07:41:08
+- Query/session selector: `session-20260705-190415-c9984f98`
+- Session ID: `session-20260705-190415-c9984f98`
+- Session title: 根据近半年的行情走势、行业发展，分析下半年科技半导体领域的投资机会，所有上下游产业链都要叙述清楚并找到相应的投资标的，最后给出详细的行情解读报告以及每个产业链的投资标的
+- Primary run: `20260705-192125-827258b5`
+- Runs included: 2
+- Time window: 2026-07-05 11:05:20 to 2026-07-05 16:03:53
 - Final report available: yes
 
 ## Reading Order

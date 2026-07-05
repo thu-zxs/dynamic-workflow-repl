@@ -10,6 +10,8 @@
       "path": "runs/20260704-135134-fc83a0f4",
       "run_id": "20260704-135134-fc83a0f4",
       "session_id": "",
+      "session_title": "",
+      "session_turn": null,
       "status": "planning_followup",
       "updated_at": "2026-07-04T05:55:00.520111+00:00"
     },
@@ -23,6 +25,8 @@
       "path": "runs/20260704-142455-b1a2de66",
       "run_id": "20260704-142455-b1a2de66",
       "session_id": "",
+      "session_title": "",
+      "session_turn": null,
       "status": "planning",
       "updated_at": "2026-07-04T06:24:55.612719+00:00"
     },
@@ -36,6 +40,8 @@
       "path": "runs/20260704-142518-ddbaa1a1",
       "run_id": "20260704-142518-ddbaa1a1",
       "session_id": "",
+      "session_title": "",
+      "session_turn": null,
       "status": "planning",
       "updated_at": "2026-07-04T06:25:18.531833+00:00"
     },
@@ -49,6 +55,8 @@
       "path": "runs/20260704-142554-5a346096",
       "run_id": "20260704-142554-5a346096",
       "session_id": "",
+      "session_title": "",
+      "session_turn": null,
       "status": "planning",
       "updated_at": "2026-07-04T06:25:54.651717+00:00"
     },
@@ -62,6 +70,8 @@
       "path": "runs/20260704-142802-8e87f907",
       "run_id": "20260704-142802-8e87f907",
       "session_id": "",
+      "session_title": "",
+      "session_turn": null,
       "status": "done",
       "updated_at": "2026-07-04T07:41:08.534338+00:00"
     }

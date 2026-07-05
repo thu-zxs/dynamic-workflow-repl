@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .context import compact_findings, compact_verifications
 from .llm import LLMClient
 from .models import Finding, Subtask, VerificationResult, VerificationStep, WorkflowPlan
 from .tools import ToolRegistry
@@ -92,7 +93,7 @@ class WorkerAgent:
             "SUBTASK_JSON:\n"
             f"{json.dumps(subtask.to_dict(), ensure_ascii=False)}\n\n"
             "DEPENDENCY_FINDINGS_JSON:\n"
-            f"{json.dumps([item.to_dict() for item in dependency_findings], ensure_ascii=False)}\n\n"
+            f"{json.dumps(compact_findings(dependency_findings), ensure_ascii=False)}\n\n"
             "Return one Finding JSON object."
         )
         if self.tool_registry is not None:
@@ -138,8 +139,8 @@ class VerifierAgent:
             f"ROOT_GOAL:\n{plan.goal}\n\n"
             "VERIFICATION_STEP_JSON:\n"
             f"{json.dumps(step.to_dict(), ensure_ascii=False)}\n\n"
-            "FINDINGS_JSON:\n"
-            f"{json.dumps([item.to_dict() for item in findings], ensure_ascii=False)}\n\n"
+            "COMPACT_FINDINGS_JSON:\n"
+            f"{json.dumps(compact_findings(findings), ensure_ascii=False)}\n\n"
             "Return one VerificationResult JSON object."
         )
         raw = await self.llm.chat_json(
@@ -176,10 +177,10 @@ class SynthesizerAgent:
     ) -> str:
         user = (
             f"ROOT_GOAL:\n{goal}\n\n"
-            "FINDINGS_JSON:\n"
-            f"{json.dumps([item.to_dict() for item in findings], ensure_ascii=False)}\n\n"
-            "VERIFICATIONS_JSON:\n"
-            f"{json.dumps([item.to_dict() for item in verifications], ensure_ascii=False)}\n\n"
+            "COMPACT_FINDINGS_JSON:\n"
+            f"{json.dumps(compact_findings(findings), ensure_ascii=False)}\n\n"
+            "COMPACT_VERIFICATIONS_JSON:\n"
+            f"{json.dumps(compact_verifications(verifications), ensure_ascii=False)}\n\n"
             "UNRESOLVED_SUMMARY_JSON:\n"
             f"{json.dumps(unresolved_summary, ensure_ascii=False)}\n\n"
             "Return final report JSON."
